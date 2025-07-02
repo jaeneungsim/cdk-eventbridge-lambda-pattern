@@ -4,14 +4,12 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as eventsources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 
 // WAF Stack (us-east-1)
@@ -82,7 +80,7 @@ export class BackendStack extends cdk.Stack {
 
     // Lambda functions
     const lambdaFunction1 = new lambda.Function(this, 'ScoreValidatorFunction', {
-      runtime: lambda.Runtime.NODEJS_18_X,
+      runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/sample-lambda-1'),
       timeout: cdk.Duration.seconds(30),
@@ -92,7 +90,7 @@ export class BackendStack extends cdk.Stack {
     });
 
     const lambdaFunction2 = new lambda.Function(this, 'LowScoreProcessorFunction', {
-      runtime: lambda.Runtime.NODEJS_18_X,
+      runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/sample-lambda-2'),
       timeout: cdk.Duration.seconds(30),
@@ -133,8 +131,10 @@ export class BackendStack extends cdk.Stack {
       },
     });
 
-    // Lambda Integration
-    const lambdaIntegration1 = new apigateway.LambdaIntegration(lambdaFunction1);
+    // Lambda Integration (proxy integration automatically passes query parameters)
+    const lambdaIntegration1 = new apigateway.LambdaIntegration(lambdaFunction1, {
+      proxy: true, // Enable proxy integration - this passes all request data to Lambda
+    });
     
     // Add /api resource and sub-resources
     const api = this.apiGateway.root.addResource('api');
@@ -192,7 +192,17 @@ export class FrontendStack extends cdk.Stack {
         '/api/*': {
           origin: apiOrigin,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          cachePolicy: new cloudfront.CachePolicy(this, 'ApiCachePolicy', {
+            cachePolicyName: 'api-cache-policy',
+            comment: 'Cache policy for API routes with query parameters',
+            defaultTtl: cdk.Duration.seconds(0), // No caching
+            maxTtl: cdk.Duration.seconds(1),
+            minTtl: cdk.Duration.seconds(0),
+            queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(), // Forward all query parameters
+            headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Authorization', 'Content-Type'),
+            cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+          }),
+          originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         },
       },
