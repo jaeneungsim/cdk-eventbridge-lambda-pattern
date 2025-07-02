@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EventBridge Lambda Pattern</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #007bff;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.success {
+            background-color: #28a745;
+        }
+        button.warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+            width: 100px;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            white-space: pre-wrap;
+        }
+        .architecture {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 EventBridge Lambda Pattern</h1>
+        
+        <div class="architecture">
+            <h3>Architecture Flow:</h3>
+            WAF → CloudFront → API Gateway → Lambda1 → EventBridge → SQS → Lambda2
+        </div>
+        
+        <p>This pattern demonstrates:</p>
+        <ul>
+            <li><strong>Direct Lambda Integration</strong>: API Gateway calls Lambda1 directly</li>
+            <li><strong>EventBridge Conditional Logic</strong>: Lambda1 sends events only for scores < 50 or missing</li>
+            <li><strong>SQS Message Processing</strong>: Lambda2 processes EventBridge events via SQS</li>
+            <li><strong>CloudFront Distribution</strong>: Global CDN for frontend assets</li>
+        </ul>
+        
+        <div class="test-section">
+            <h3>Score Validation Test</h3>
+            <p>Enter a score and test the validation logic:</p>
+            
+            <div>
+                <label>Score: </label>
+                <input type="number" id="scoreInput" placeholder="0-100" min="0" max="100" value="75">
+                <button onclick="testScore()">Test Score</button>
+            </div>
+            
+            <div style="margin-top: 10px;">
+                <button class="success" onclick="testHighScore()">Test High Score (≥50)</button>
+                <button class="warning" onclick="testLowScore()">Test Low Score (<50)</button>
+                <button style="background-color: #dc3545;" onclick="testMissingScore()">Test Missing Score</button>
+            </div>
+            
+            <p><em>
+                • Scores ≥ 50: Direct response from Lambda1<br>
+                • Scores < 50 or missing: Triggers EventBridge → SQS → Lambda2
+            </em></p>
+        </div>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function testScore() {
+            const score = document.getElementById('scoreInput').value;
+            const endpoint = score ? `/api/score?score=${score}` : '/api/score';
+            await callScoreApi(endpoint, `Score: ${score || 'missing'}`);
+        }
+
+        async function testHighScore() {
+            document.getElementById('scoreInput').value = 75;
+            await callScoreApi('/api/score?score=75', 'High Score (75)');
+        }
+
+        async function testLowScore() {
+            document.getElementById('scoreInput').value = 25;
+            await callScoreApi('/api/score?score=25', 'Low Score (25)');
+        }
+
+        async function testMissingScore() {
+            document.getElementById('scoreInput').value = '';
+            await callScoreApi('/api/score', 'Missing Score');
+        }
+
+        async function callScoreApi(endpoint, testName) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `Testing ${testName}...`;
+            
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                let resultHtml = `<h3>✅ ${testName} - Response Received</h3>`;
+                resultHtml += `<strong>Response:</strong>\n${JSON.stringify(data, null, 2)}\n\n`;
+                
+                if (data.action === 'EventBridge notification sent') {
+                    resultHtml += `<strong>EventBridge Flow Triggered:</strong>\n`;
+                    resultHtml += `1. Lambda1 sent event to EventBridge\n`;
+                    resultHtml += `2. EventBridge forwards to SQS queue\n`;
+                    resultHtml += `3. Lambda2 will process the message\n`;
+                    resultHtml += `4. Check CloudWatch logs for Lambda2 processing\n\n`;
+                } else {
+                    resultHtml += `<strong>Direct Processing:</strong>\n`;
+                    resultHtml += `Score validation passed - no EventBridge event needed\n\n`;
+                }
+                
+                resultDiv.innerHTML = resultHtml;
+                
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <h3>❌ ${testName} - Error</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
