@@ -1,97 +1,63 @@
-# AWS CDK SQS-Lambda Pattern
+# EventBridge Lambda Pattern with CDK
 
-A production-ready serverless web application pattern using AWS CDK that provides resilient, asynchronous request processing through SQS queues.
-
-## Why This Pattern?
-
-Traditional synchronous API patterns fail under real-world conditions:
-
-- **Traffic spikes** overwhelm Lambda concurrency limits, causing request failures
-- **Network timeouts** on mobile/unstable connections lose user data
-- **External service outages** break entire application workflows
-- **Cost inefficiency** from always-on infrastructure during low-traffic periods
-
-This pattern solves these issues by:
-- **Buffering requests** in SQS during traffic surges
-- **Guaranteeing request capture** before network issues occur
-- **Automatic retry** with dead letter queues for failed processing
-- **Pay-per-use** scaling that reduces costs during off-peak hours
+A production-ready serverless architecture demonstrating EventBridge-driven Lambda processing with conditional logic. This pattern shows how to implement asynchronous event processing triggered by business rules.
 
 ## Architecture
 
 ```
-┌─────────────┐    ┌─────────┐    ┌──────────────┐    ┌─────────────┐
-│   Browser   │───▶│   WAF   │───▶│  CloudFront  │───▶│  S3 (Web)   │
-└─────────────┘    └─────────┘    └──────────────┘    └─────────────┘
-                                           │
-                                           ▼
-                                  ┌──────────────┐    ┌─────────────┐    ┌─────────────┐
-                                  │ API Gateway  │───▶│ SQS Queue   │───▶│   Lambda    │
-                                  └──────────────┘    └─────────────┘    └─────────────┘
-                                                             │
-                                                             ▼
-                                                    ┌─────────────┐
-                                                    │ Dead Letter │
-                                                    │   Queue     │
-                                                    └─────────────┘
+Browser → CloudFront → API Gateway → Lambda1 → EventBridge → SQS → Lambda2
 ```
 
 **Request Flow:**
-1. API Gateway immediately accepts requests and queues them in SQS
-2. Lambda functions process messages asynchronously from the queue
-3. Failed messages retry automatically, then move to Dead Letter Queue
-4. Frontend served via CloudFront from S3 for global performance
+1. **API Gateway** receives GET requests with score parameter
+2. **Lambda1** validates score and responds immediately to user
+3. **EventBridge** receives events for scores < 50 or missing scores
+4. **SQS** queues EventBridge events for reliable processing
+5. **Lambda2** processes low-score events asynchronously
 
-## Project Structure
+## When to Use This Pattern
 
-```
-├── bin/
-│   └── cdk-sqs-lambda-pattern.ts     # CDK app entry point
-├── lib/
-│   └── cdk-sqs-lambda-pattern-stack.ts # Stack definitions
-├── lambda/
-│   ├── sample-lambda-1/
-│   │   └── index.js                  # Message processor 1
-│   └── sample-lambda-2/
-│       └── index.js                  # Message processor 2
-├── web/
-│   └── index.html                    # Frontend application
-└── test/
-    └── *.test.ts                     # Unit tests
-```
+### Ideal For:
+- **Business rule validation** with downstream processing
+- **Audit trails** for failed validations
+- **Async notifications** based on conditions
+- **Event-driven microservices** with decoupled components
+- **High-throughput APIs** requiring fast response times
 
-## Key Components
+### Use Cases:
+- Credit score checks with follow-up actions
+- Order validation with inventory updates
+- User registration with verification workflows
+- Content moderation with review queues
 
-### Multi-Stack Architecture
-- **WafStack**: Security layer with rate limiting (us-east-1)
-- **BackendStack**: API Gateway, SQS queues, Lambda functions
-- **FrontendStack**: CloudFront distribution and S3 hosting
+## Key Features
 
-### SQS Configuration
-- **Visibility Timeout**: 60 seconds (2x Lambda timeout)
-- **Dead Letter Queue**: After 3 failed attempts
-- **Batch Processing**: Up to 10 messages per Lambda invocation
-- **Message Retention**: 14 days
+### **Production-Ready Components**
+- **Multi-region deployment** (WAF: us-east-1, Backend: ap-southeast-2)
+- **CloudFront CDN** with automatic cache invalidation
+- **Dead Letter Queues** for error handling
+- **EventBridge custom bus** for event isolation
+- **Batch processing** with individual failure handling
 
-### Security Features
-- WAF with rate limiting (2000 requests per 5 minutes)
-- Origin Access Control for S3
-- IAM least privilege access
-- CORS configuration for cross-origin requests
+### **Performance Optimizations**
+- **Asynchronous EventBridge calls** for faster response times
+- **CloudFront caching** with query parameter forwarding
+- **Lambda proxy integration** for efficient API Gateway setup
+- **SQS batching** for optimal throughput
 
 ## Quick Start
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 20+
 - AWS CLI configured
-- CDK CLI installed: `npm install -g aws-cdk`
+- CDK CLI: `npm install -g aws-cdk`
 
-### Deploy
+### Installation
 
 ```bash
-# Clone and install
-git clone https://github.com/jaeneungsim/cdk-sqs-lambda-pattern.git
-cd cdk-sqs-lambda-pattern
+# Clone and install dependencies
+git clone <repository-url>
+cd cdk-eventbridge-lambda-pattern
 npm install
 
 # Bootstrap CDK (first time only)
@@ -99,112 +65,155 @@ cdk bootstrap
 
 # Deploy all stacks
 cdk deploy --all
-
-# Test the endpoints
-curl -X POST https://your-cloudfront-url/api/sample-lambda-1 \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello World"}'
 ```
 
-### Outputs
-After deployment, you'll get:
-- **CloudFront URL**: Access your web application
-- **API Gateway URL**: Direct API access (bypasses CloudFront)
-- **SQS Queue URLs**: For monitoring message processing
+### Configuration
+
+Set your AWS profile if needed:
+```bash
+export AWS_PROFILE=your-profile-name
+```
 
 ## Testing
 
-The web interface provides buttons to test both Lambda functions:
-1. Open the CloudFront URL in your browser
-2. Click "Test Sample Lambda 1" or "Test Sample Lambda 2"
-3. Messages are queued immediately and processed asynchronously
-4. Check CloudWatch logs to see message processing
+### Web Interface
+1. Open the CloudFront URL from deployment output
+2. Test different score scenarios:
+   - **High Score (≥50)**: Direct Lambda1 response
+   - **Low Score (<50)**: Triggers EventBridge → SQS → Lambda2
+   - **Missing Score**: Same as low score flow
 
-## Monitoring
+### API Testing
+```bash
+# High score - immediate response
+curl "https://your-cloudfront-url/api/score?score=75"
 
-Essential CloudWatch metrics to monitor:
-- **Queue Depth**: `ApproximateNumberOfVisibleMessages`
-- **Processing Lag**: `ApproximateAgeOfOldestMessage`
-- **Dead Letter Queue**: Messages requiring manual intervention
-- **Lambda Errors**: Processing failures and throttling
+# Low score - triggers event processing
+curl "https://your-cloudfront-url/api/score?score=25"
+
+# Missing score - triggers event processing
+curl "https://your-cloudfront-url/api/score"
+```
+
+### Expected Responses
+
+**High Score (≥50):**
+```json
+{
+  "message": "Score validation passed",
+  "score": 75,
+  "status": "success",
+  "timestamp": "2025-07-02T12:00:00.000Z"
+}
+```
+
+**Low Score (<50):**
+```json
+{
+  "message": "Score validation failed - event sent to processing pipeline",
+  "score": "25",
+  "action": "EventBridge notification sent",
+  "timestamp": "2025-07-02T12:00:00.000Z"
+}
+```
 
 ## Production Considerations
 
-### Environment Configuration
-```typescript
-// Different settings per environment
-const config = {
-  dev: { rateLimitRpm: 1000, lambdaConcurrency: 10 },
-  prod: { rateLimitRpm: 10000, lambdaConcurrency: 100 }
-};
-```
+### **CloudFront Configuration**
+- **Automatic Invalidation**: Web assets automatically invalidated on deployment
+- **Query Parameter Forwarding**: Properly configured for API routes
+- **CORS Support**: Enabled for cross-origin requests
 
-### Cost Optimization
-- Lambda functions only run when processing messages
-- CloudFront caching reduces origin requests
-- SQS charges only for message operations
-- No idle infrastructure costs
+### **EventBridge Best Practices**
+- **Asynchronous Calls**: EventBridge calls don't block user responses
+- **Custom Event Bus**: Isolated from default bus for better organization
+- **Structured Events**: Consistent event format for downstream processing
 
-### Scaling
-- API Gateway: Handles 10,000+ concurrent requests
-- SQS: Unlimited message throughput
-- Lambda: Auto-scales based on queue depth
-- CloudFront: Global edge caching
+### **Error Handling**
+- **Dead Letter Queues**: Failed messages after 3 retries
+- **Batch Item Failures**: Individual message retry capability
+- **EventBridge Fallback**: Continues even if EventBridge fails
 
-## Extending the Pattern
+### **Monitoring**
+Monitor these CloudWatch metrics:
+- **Lambda Duration**: Response time optimization
+- **EventBridge Invocations**: Event processing volume
+- **SQS Queue Depth**: Processing lag indicators
+- **DLQ Message Count**: Error rate monitoring
 
-### Add New Message Processors
-```typescript
-// Add new Lambda function
-const newProcessor = new lambda.Function(this, 'NewProcessor', {
-  runtime: lambda.Runtime.NODEJS_18_X,
-  handler: 'index.handler',
-  code: lambda.Code.fromAsset('lambda/new-processor')
+## Architecture Decisions
+
+### Fire-and-Forget vs Awaited EventBridge
+
+**Current Implementation (Fire-and-Forget):**
+```javascript
+// Non-blocking EventBridge call - don't wait for response
+eventBridge.send(command).catch(error => {
+    console.error('EventBridge failed:', error);
+    // User response not affected
 });
-
-// Connect to SQS queue
-newProcessor.addEventSource(new eventsources.SqsEventSource(newQueue));
+return response; // Immediate response
 ```
 
-### Common Extensions
-- **Database Integration**: DynamoDB, RDS connections
-- **Notification Systems**: Email, SMS, push notifications
-- **File Processing**: S3 uploads, image resizing
-- **External APIs**: Third-party service integrations
+**Alternative (Awaited):**
+```javascript
+// Wait for EventBridge response before continuing
+await eventBridge.send(command);
+return response; // Delayed response
+```
 
-## Useful Commands
+**Trade-offs:**
+- **Fire-and-Forget**: Faster response (50-100ms) but no delivery guarantee to user
+- **Awaited**: Slower response (200-500ms) but guaranteed event delivery
 
+### **Direct Lambda vs SQS Integration**
+
+**Current**: API Gateway → Lambda1 (Direct)  
+**Alternative**: API Gateway → SQS → Lambda1 (Indirect)
+
+**Benefits of Direct Integration:**
+- Immediate score validation
+- Real-time user feedback
+- Simpler error handling
+
+## Development
+
+### Project Structure
+```
+├── bin/cdk-eventbridge-lambda-pattern.ts    # CDK app entry
+├── lib/cdk-eventbridge-lambda-pattern-stack.ts # Infrastructure
+├── lambda/
+│   ├── sample-lambda-1/index.js            # Score validator
+│   └── sample-lambda-2/index.js            # Event processor
+├── web/index.html                          # Test interface
+└── test/                                   # Unit tests
+```
+
+### Local Development
 ```bash
-# List all stacks
-cdk ls
+# Watch for changes
+npm run watch
+
+# Run tests
+npm test
+
+# Check differences before deploy
+cdk diff
 
 # Deploy specific stack
 cdk deploy BackendStack
-
-# View differences before deploy
-cdk diff
-
-# Destroy all resources
-cdk destroy --all
-
-# Generate CloudFormation template
-cdk synth
 ```
 
-## When to Use This Pattern
-
-**Best for:**
-- E-commerce platforms with variable traffic
-- User registration/onboarding systems
-- File upload and processing workflows
-- Integration with unreliable external services
-- Applications requiring audit trails
-
-**Consider alternatives for:**
-- Real-time applications needing immediate responses
-- Simple CRUD operations with consistent load
-- Applications with strict latency requirements (< 100ms)
+### Cleanup
+```bash
+# Remove all resources
+cdk destroy --all
+```
 
 ## License
 
-MIT License - Use this pattern for building resilient serverless applications.
+MIT License
+
+---
+
+Built with AWS CDK and modern serverless patterns.
