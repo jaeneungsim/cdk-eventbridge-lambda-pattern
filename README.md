@@ -1,6 +1,6 @@
 # EventBridge Lambda Pattern with CDK
 
-A production-ready serverless architecture demonstrating EventBridge-driven Lambda processing with conditional logic. This pattern shows how to implement asynchronous event processing triggered by business rules.
+A serverless architecture pattern demonstrating EventBridge-driven Lambda processing with conditional logic. This project illustrates solutions to common implementation challenges I've encountered in production environments, focusing on clear pattern demonstration rather than production-ready code.
 
 ## Architecture
 
@@ -32,7 +32,7 @@ Browser → CloudFront → API Gateway → Lambda1 → EventBridge → SQS → L
 
 ## Key Features
 
-### **Production-Ready Components**
+### **Key Components**
 - **Multi-region deployment** (WAF: us-east-1, Backend: ap-southeast-2)
 - **CloudFront CDN** with automatic cache invalidation
 - **Dead Letter Queues** for error handling
@@ -117,29 +117,39 @@ curl "https://your-cloudfront-url/api/score"
 }
 ```
 
-## Production Considerations
+## Important Notes for Production Use
 
-### **CloudFront Configuration**
-- **Automatic Invalidation**: Web assets automatically invalidated on deployment
-- **Query Parameter Forwarding**: Properly configured for API routes
-- **CORS Support**: Enabled for cross-origin requests
+⚠️ **This is a demonstration project** - The configurations shown here prioritize clarity and learning over production security and performance.
 
-### **EventBridge Best Practices**
-- **Asynchronous Calls**: EventBridge calls don't block user responses
-- **Custom Event Bus**: Isolated from default bus for better organization
-- **Structured Events**: Consistent event format for downstream processing
+### **Security Considerations**
+For production environments, ensure proper configuration of:
+- **IAM Policies**: Implement least privilege access principles
+- **VPC Configuration**: Deploy Lambda functions in private subnets
+- **API Gateway Security**: Add authentication, rate limiting, and request validation
+- **CloudFront Security**: Configure WAF rules and security headers
+- **Environment Variables**: Use AWS Secrets Manager or Parameter Store for sensitive data
 
-### **Error Handling**
-- **Dead Letter Queues**: Failed messages after 3 retries
-- **Batch Item Failures**: Individual message retry capability
-- **EventBridge Fallback**: Continues even if EventBridge fails
+### **Architecture Separation**
+Consider separating components into multiple stacks for production:
+- **Network Stack**: VPC, subnets, security groups
+- **Shared Resources Stack**: EventBridge bus, SQS queues
+- **API Stack**: API Gateway, Lambda functions
+- **Frontend Stack**: CloudFront, S3 bucket
+- **Monitoring Stack**: CloudWatch dashboards, alarms
 
-### **Monitoring**
-Monitor these CloudWatch metrics:
+### **Performance & Reliability**
+- **Lambda Configuration**: Optimize memory allocation and timeout settings
+- **EventBridge Rules**: Add input transformers and error handling
+- **SQS Configuration**: Set appropriate visibility timeout and message retention
+- **CloudFront Caching**: Configure proper TTL values for your use case
+
+### **Monitoring & Observability**
+Implement comprehensive monitoring:
 - **Lambda Duration**: Response time optimization
 - **EventBridge Invocations**: Event processing volume
 - **SQS Queue Depth**: Processing lag indicators
 - **DLQ Message Count**: Error rate monitoring
+- **Custom Metrics**: Business-specific KPIs
 
 ## Architecture Decisions
 
@@ -216,4 +226,4 @@ MIT License
 
 ---
 
-Built with AWS CDK and modern serverless patterns.
+This project demonstrates patterns and solutions based on real-world implementation challenges. For production use, please ensure proper security configurations, stack separation, and comprehensive monitoring as outlined in the production considerations section.
